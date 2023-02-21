@@ -1,0 +1,200 @@
+---
+title: "sandbox"
+output: html_document
+date: "2023-02-21"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This is the markdown I use to figure out the proper pipeline.
+Here is the fast extraction, but we can't get above 5000.
+
+```{r}
+library(easyPubMed)
+library(dplyr)
+library(kableExtra)
+library(tidyverse)
+```
+
+```{r}
+# Query pubmed and fetch many results
+my_query <- 'cytof OR "mass cytometry"' 
+my_query <- get_pubmed_ids(my_query)
+
+# Fetch data
+my_abstracts_xml <- fetch_pubmed_data(my_query, retstart = 0, retmax = 5000)  
+
+# Store Pubmed Records as elements of a list
+all_xml <- articles_to_list(my_abstracts_xml)
+
+# Starting time: record
+t.start <- Sys.time()
+
+# Perform operation (use lapply here, no further parameters)
+final_df <- do.call(rbind, lapply(all_xml, article_to_df, 
+                                  max_chars = -1, getAuthors = FALSE))
+
+# Final time: record
+t.stop <- Sys.time()
+
+# How long did it take?
+print(t.stop - t.start)
+```
+
+Now we're going to experiment with batch_pubmed_download to speed it up. 
+
+```{r}
+d.fls <- batch_pubmed_download(pubmed_query_string = "cytof", batch_size = 50)
+
+new_PM_file <- d.fls[[1]]
+new_PM_df <- table_articles_byAuth(pubmed_data = new_PM_file, 
+                                   included_authors = "first", 
+                                   max_chars = 500, 
+                                   encoding = "ASCII")
+
+# Printing a sample of the resulting data frame
+new_PM_df$address <- substr(new_PM_df$address, 1, 28)
+new_PM_df$jabbrv <- substr(new_PM_df$jabbrv, 1, 9)
+sid <- seq(5, nrow(new_PM_df), by = 10)
+
+new_PM_df[sid, c("pmid", "year", "jabbrv", "lastname", "address")]
+```
+
+Now we're going to loop it.
+
+```{r}
+batch_list <- batch_pubmed_download(pubmed_query_string = 'cytof OR "mass cytometry"', batch_size = 50)
+
+final <- lapply(batch_list, function(i) {
+    result <- table_articles_byAuth(pubmed_data = i, 
+                                   included_authors = "first", 
+                                   max_chars = 500, 
+                                   encoding = "ASCII")
+    return(as_tibble(result))
+}) %>% bind_rows()
+```
+
+Now we make a function
+
+```{r}
+GetPubMedData <- function(query) {
+    batch_list <- batch_pubmed_download(pubmed_query_string = query,
+                                        batch_size = 50)
+
+    final <- lapply(batch_list, function(i) {
+        result <- table_articles_byAuth(pubmed_data = i,
+                                   included_authors = "first",
+                                   max_chars = 500,
+                                   encoding = "ASCII")
+        return(as_tibble(result))
+    }) %>% bind_rows()
+    
+    return(final)
+}
+```
+
+```{r}
+cytof <- GetPubMedData(query = 'cytof OR "mass cytometry"')
+```
+
+```{r}
+GetPubmedData <- function(query) {
+    print("setting up query")
+    my_query <- get_pubmed_ids(query)
+    print("query complete")
+    num_records <- my_query$Count %>% as.numeric()
+    print(num_records)
+    
+    # Fetch data
+    my_abstracts_xml <- list()
+    count <- 0
+    curr_length <- 1000
+    curr_retstart <- 0
+    while(TRUE) {
+        print(curr_length)
+        if(curr_retstart > num_records) break() 
+        count <- count + 1
+        print(curr_retstart)
+        print(curr_length)
+        curr <- fetch_pubmed_data(my_query, 
+                                  retstart = curr_retstart, 
+                                  retmax = curr_length)
+        print("fetched pubmed data")
+        curr_retstart <- curr_retstart + 1000
+        curr_xml <- articles_to_list(curr)
+        curr_length <- length(curr_xml)
+        my_abstracts_xml[[count]] <- curr_xml
+    }
+    print("out of the loop")
+    my_abstracts_xml <- do.call(c, my_abstracts_xml)
+
+    # Starting time: record
+    t.start <- Sys.time()
+
+    # Perform operation (use lapply here, no further parameters)
+    final_df <- do.call(rbind, lapply(my_abstracts_xml, article_to_df, 
+                                  max_chars = -1, getAuthors = FALSE))
+
+    # Final time: record
+    t.stop <- Sys.time()
+
+    # How long did it take?
+    print(t.stop - t.start)
+    
+    return(as_tibble(final_df))
+}
+
+```
+
+Let's try it on our query
+
+```{r}
+query <- 'cytof OR "mass cytometry"'
+cytof <- GetPubmedData(query = query)
+```
+Ok lets go with the written solution. There are some quirks I can't figure out.
+
+```{r}
+query <- 'cytof OR "mass cytometry"'
+qr1 <- get_pubmed_ids(pubmed_query_string = query)
+
+# Let's write down the loop and ret params
+first.i <- 0
+last.i <- as.numeric(qr1$Count) - 1 
+batch_size <- 50
+
+# Given these params, what are the retstart for each iteration?
+my.rs <- seq(from = first.i, 
+             to = last.i, 
+             by = batch_size)
+
+# Show all ret.start values for the loop
+print(my.rs)
+
+# Initialize a collector list
+# This is where we are storing all results
+y <- list()
+
+# Now, loop through the my.rs, rocess records, and 
+# save the resulting data.frame to y
+# This should take less than 2 min
+for (i in my.rs) {
+  tmp <- fetch_pubmed_data(pubmed_id_list = qr1, retstart = i, retmax = batch_size)
+  tmp <- table_articles_byAuth(tmp, included_authors = 'last', max_chars = 0)
+
+  # Save to collector list
+  y[[length(y) + 1]] <- tmp
+}
+
+# Results are included in a list. Each element is a data.frame
+class(y)
+
+# Aggregate results
+y <- do.call(rbind, y) %>% as_tibble()
+
+# Check again the class of y
+class(y)
+```
+

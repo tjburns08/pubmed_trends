@@ -1,0 +1,142 @@
+---
+title: "Get trends"
+output: html_document
+date: "2023-02-21"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+TrendPlot <- function(inquiry, name, save_plot = TRUE, log10_scale = TRUE) {
+    # Uses ggplot to make a plot of the trends from the inquiry
+    # Args:
+    #   inquiry: tibble of number of publications per year for each topic 
+    #       orinigally queried
+    #   name: the name of the file for saving
+    # Returns:
+    #   a ggplot object of the inquiry results
+    toplot <- reshape2::melt(inquiry, id = "year")
+    p <- ggplot(toplot, aes(x = as.numeric(year), y = value, color = variable)) + 
+        geom_line() +
+        ylab("papers per year")
+    
+    if(log10_scale == TRUE) {
+        p <- p + scale_y_log10()
+    }
+    
+    if(save_plot == TRUE) {
+        ggsave(paste(name, "png", sep = "."))
+    }
+    return(p)
+}
+
+Tabulate <- function(df) {
+    tab <- table(df$year)
+    year <- as.numeric(names(tab))
+    counts <- unname(tab) %>% as.numeric()
+    result <- tibble(year = year, counts = counts)
+    return(result)
+}
+
+MakeCombinedDf <- function(df_list) {
+    # Find unique years across all data frames
+    year_range <- unique(unlist(lapply(df_list, `[[`, "year"))) %>% 
+        as.numeric() %>% 
+        range()
+
+    year_range = year_range[1]:year_range[2]
+
+    # Create empty tibble with all years in range
+    com <- tibble(year = year_range)
+
+    # Fill in counts for each data frame in list
+    for (i in seq(length(df_list))) {
+        # Merge with empty tibble to ensure all years are included
+        com <- merge(com, df_list[[i]], by = "year", all = TRUE)
+        # Fill missing counts with 0
+        com[is.na(com)] <- 0
+    }
+
+    names(com) <- c("year", names(df_list))
+
+    # Print final combined tibble
+    return(com)
+}
+```
+
+
+```{r}
+setwd(here::here("output"))
+cytof <- readRDS("cytof.Rds") %>% Tabulate()
+spectral <- readRDS("spectral.Rds") %>% Tabulate()
+scrna_seq <- readRDS("scrna_seq.Rds") %>% Tabulate()
+cite_seq <- readRDS("cite-seq.Rds") %>% Tabulate()
+tsne <- readRDS("tsne.Rds") %>% Tabulate()
+umap <- readRDS("umap.Rds") %>% Tabulate()
+flowsom <- readRDS("flowsom.Rds") %>% Tabulate()
+phenograph <- readRDS("phenograph.Rds") %>% Tabulate()
+```
+
+We start with trends.
+
+```{r}
+df_list <- list(cytof = cytof, 
+                spectral = spectral, 
+                scrna_seq = scrna_seq, 
+                cite_seq = cite_seq)
+
+com <- MakeCombinedDf(df_list)
+```
+
+```{r}
+setwd(here::here("output", "images"))
+
+# Get rid of current year
+com <- dplyr::filter(com, year < 2023)
+TrendPlot(com, "tool_trends_log10")
+TrendPlot(com, "tool_trends", log10_scale = FALSE)
+```
+Now dimr algorithms
+
+```{r}
+df_list <- list(flowsom = flowsom, 
+                phenograph = phenograph)
+
+com <- MakeCombinedDf(df_list)
+```
+
+```{r}
+setwd(here::here("output", "images"))
+
+# Get rid of current year
+com <- dplyr::filter(com, year < 2023)
+TrendPlot(com, "cluster_trends_log10")
+TrendPlot(com, "cluster_trends", log10_scale = FALSE)
+```
+
+
+```{r}
+df_list <- list(tsne = tsne, 
+                umap = umap)
+
+com <- MakeCombinedDf(df_list)
+```
+
+```{r}
+setwd(here::here("output", "images"))
+
+# Cleanup
+tmp <- com[1]
+com <- apply(com[-1], 2, function(i) {
+    ifelse(i < 5, 0, i)
+}) %>% as_tibble()
+com <- bind_cols(tmp, com)
+com <- filter(com, tsne > 0 | umap > 0)
+
+# Get rid of current year
+com <- dplyr::filter(com, year < 2023)
+TrendPlot(com, "dimr_trends_log10")
+TrendPlot(com, "dimr_trends", log10_scale = FALSE)
+```

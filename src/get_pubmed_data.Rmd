@@ -1,0 +1,98 @@
+---
+title: "Get pubmed data"
+output: html_document
+date: "2023-02-21"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+GetPubmedData <- function(query) {
+    print("setting up query")
+    my_query <- get_pubmed_ids(query)
+    print("query complete")
+    num_records <- my_query$Count %>% as.numeric()
+    print(num_records)
+    
+    # Fetch data
+    my_abstracts_xml <- list()
+    count <- 0
+    curr_length <- 1000
+    curr_retstart <- 0
+    while(TRUE) {
+        print(curr_length)
+        if(curr_retstart > num_records) break() 
+        count <- count + 1
+        curr <- fetch_pubmed_data(my_query, 
+                                  retstart = curr_retstart, 
+                                  retmax = curr_length)
+        print("fetched pubmed data")
+        curr_retstart <- curr_retstart + 1000
+        curr_xml <- articles_to_list(curr)
+        curr_length <- length(curr_xml)
+        my_abstracts_xml[[count]] <- curr_xml
+    }
+    print("out of the loop")
+    my_abstracts_xml <- do.call(c, my_abstracts_xml)
+
+    # Starting time: record
+    t.start <- Sys.time()
+
+    # Perform operation (use lapply here, no further parameters)
+    final_df <- do.call(rbind, lapply(my_abstracts_xml, article_to_df, 
+                                  max_chars = -1, getAuthors = FALSE))
+
+    # Final time: record
+    t.stop <- Sys.time()
+
+    # How long did it take?
+    print(t.stop - t.start)
+    
+    return(as_tibble(final_df))
+}
+```
+
+Let's try it on our query
+
+```{r}
+library(tidyverse)
+library(here)
+library(easyPubMed)
+library(dplyr)
+library(kableExtra)
+```
+
+```{r tech}
+setwd(here::here("output"))
+
+cytof <- GetPubmedData(query = 'cytof OR "mass cytometry"')
+saveRDS(cytof, "cytof.Rds")
+
+spectral <- GetPubmedData(query = '"spectral flow cytometry" OR "spectral flow cytometer" OR "spectral cytometry" OR "cytek aurora"')
+saveRDS(spectral, "spectral.Rds")
+
+scrna_seq <- GetPubmedData(query = '"single cell RNA sequencing" OR "single-cell RNA sequencing" OR "single cell transcriptomics" OR "single-cell transcriptomics"')
+saveRDS(scrna_seq, "scrna_seq.Rds")
+
+cite_seq <- GetPubmedData(query = '"cite-seq"')
+saveRDS(cite_seq, "cite-seq.Rds")
+
+tsne <- GetPubmedData(query = 'tsne OR t-sne')
+saveRDS(tsne, "tsne.Rds")
+
+umap <- GetPubmedData(query = "umap")
+saveRDS(umap, "umap.Rds")
+
+flowsom <- GetPubmedData(query = "flowsom")
+saveRDS(flowsom, "flowsom.Rds")
+
+phenograph <- GetPubmedData(query = "phenograph")
+saveRDS(phenograph, "phenograph.Rds")
+
+xshift <- GetPubmedData(query = "x-shift OR xshift")
+saveRDS(xshift <- "xshift.Rds")
+```
+
+
