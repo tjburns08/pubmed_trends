@@ -19,16 +19,20 @@ TrendPlot <- function(inquiry, name, save_plot = TRUE, log10_scale = TRUE) {
     #   a ggplot object of the inquiry results
     toplot <- reshape2::melt(inquiry, id = "year")
     p <- ggplot(toplot, aes(x = as.numeric(year), y = value, color = variable)) + 
-        geom_line() +
-        ylab("papers per year")
+        geom_line() 
     
     if(log10_scale == TRUE) {
-        p <- p + scale_y_log10()
+        p <- p + scale_y_log10() + ylab("log10 papers per year")
+    } else {
+        p <- p + ylab("papers per year")
     }
+    
+    p <- p + theme(text = element_text(size = 20)) + xlab("year")
     
     if(save_plot == TRUE) {
         ggsave(paste(name, "png", sep = "."))
     }
+    
     return(p)
 }
 
@@ -68,6 +72,9 @@ MakeCombinedDf <- function(df_list) {
 
 
 ```{r}
+library(tidyverse)
+library(here)
+
 setwd(here::here("output"))
 cytof <- readRDS("cytof.Rds") %>% Tabulate()
 spectral <- readRDS("spectral.Rds") %>% Tabulate()
@@ -98,7 +105,19 @@ com <- dplyr::filter(com, year < 2023)
 TrendPlot(com, "tool_trends_log10")
 TrendPlot(com, "tool_trends", log10_scale = FALSE)
 ```
-Now dimr algorithms
+
+We'll do a slight modification for the sake of showing just single-cell protein tech.
+
+```{r}
+setwd(here::here("output", "images"))
+
+com$scrna_seq <- NULL
+TrendPlot(com, "protein_tool_trends_log10")
+TrendPlot(com, "protein_tool_trends", log10_scale = FALSE)
+```
+
+
+Now dimr algorithms.
 
 ```{r}
 df_list <- list(flowsom = flowsom, 
