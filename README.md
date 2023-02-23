@@ -20,7 +20,7 @@ Here is an example of the type of output get_trends.Rmd products:
 ![](output/images/protein_tool_trends.png)
 
 ## Media
-If you would like to know more about this project, please see my Medium article [here](https://medium.com/@tjburns_72591/how-to-utilize-scientific-literature-trends-to-gain-intuition-about-a-topic-b5c554e3d280)
+If you would like to know more about this project, please see my Medium article [here](https://medium.com/@tjburns_72591/how-to-utilize-scientific-literature-trends-to-gain-intuition-about-a-topic-b5c554e3d280).
 
 ## Acknowledgements
 Marie Burns, Elli Amir, Mike Leipold for general feedback throughout this project.
